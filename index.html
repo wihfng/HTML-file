@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>바둑 게임</title>
+  <style>
+    body {
+      font-family: 'Arial', sans-serif;
+      text-align: center;
+      background-color: #f0f0f0;
+      margin: 0;
+      padding: 0;
+    }
+    .screen { padding: 50px; }
+    .hidden { display: none; }
+    button { padding: 10px 20px; font-size: 16px; margin: 5px; cursor: pointer; }
+    button.stone-color { width: 80px; height: 40px; border-radius: 5px; }
+
+    #board {
+      display: grid;
+      grid-template-columns: repeat(19, 30px);
+      grid-template-rows: repeat(19, 30px);
+      gap: 1px;
+      justify-content: center;
+      margin: 20px auto;
+      background-color: #deb887;
+      border: 2px solid #000;
+    }
+    .cell { width: 30px; height: 30px; background-color: #f5deb3; position: relative; cursor: pointer; }
+    .cell:hover { background-color: #f0d9b5; }
+    .stone { width: 28px; height: 28px; border-radius: 50%; position: absolute; top: 1px; left: 1px; }
+    .stone.black { background-color: black; }
+    .stone.white { background-color: white; border: 1px solid black; }
+  </style>
+</head>
+<body>
+
+<div id="start-screen" class="screen">
+  <h1>바둑 게임</h1>
+  <button id="start-btn">게임 시작</button>
+</div>
+
+<div id="game-setup-screen" class="screen hidden">
+  <h2>게임 설정</h2>
+  <div class="section">
+    <h3>난이도 선택</h3>
+    <select id="difficulty">
+      <option value="easy">쉬움</option>
+      <option value="medium">중간</option>
+      <option value="hard">어려움</option>
+      <option value="hardcore">하드코어💀</option>
+    </select>
+  </div>
+  <div class="section">
+    <h3>바둑알 색 선택</h3>
+    <button class="stone-color" data-color="black">⚫ 검정</button>
+    <button class="stone-color" data-color="white">⚪ 흰색</button>
+  </div>
+  <button id="begin-game-btn">게임 시작!</button>
+</div>
+
+<div id="game-screen" class="screen hidden">
+  <h2>바둑 게임 진행 중</h2>
+  <p id="game-info"></p>
+  <p id="win-rate">승률: 0승 / 0전 (0%)</p>
+  <div id="board"></div>
+  <button id="reset-btn">다시하기</button>
+</div>
+
+<script>
+const startScreen = document.getElementById('start-screen');
+const gameSetupScreen = document.getElementById('game-setup-screen');
+const gameScreen = document.getElementById('game-screen');
+const startBtn = document.getElementById('start-btn');
+const beginGameBtn = document.getElementById('begin-game-btn');
+const resetBtn = document.getElementById('reset-btn');
+const difficultySelect = document.getElementById('difficulty');
+const stoneButtons = document.querySelectorAll('.stone-color');
+const gameInfo = document.getElementById('game-info');
+const winRateDisplay = document.getElementById('win-rate');
+const board = document.getElementById('board');
+
+let selectedColor = 'black';
+let selectedDifficulty = 'easy';
+let currentPlayer = 'black';
+let boardState = [];
+
+// 승률 저장 및 불러오기
+let userWins = parseInt(localStorage.getItem('userWins')) || 0;
+let totalGames = parseInt(localStorage.getItem('totalGames')) || 0;
+updateWinRate();
+
+// 화면 전환
+startBtn.addEventListener('click', () => {
+  startScreen.classList.add('hidden');
+  gameSetupScreen.classList.remove('hidden');
+});
+
+stoneButtons.forEach(btn => {
+  btn.addEventListener('click', () => {
+    selectedColor = btn.getAttribute('data-color');
+    stoneButtons.forEach(b => b.style.border = '');
+    btn.style.border = '2px solid red';
+  });
+});
+
+beginGameBtn.addEventListener('click', () => {
+  selectedDifficulty = difficultySelect.value;
+  gameSetupScreen.classList.add('hidden');
+  gameScreen.classList.remove('hidden');
+
+  gameInfo.textContent = `당신의 바둑알: ${selectedColor}, 난이도: ${selectedDifficulty}`;
+  currentPlayer = selectedColor;
+  createBoard();
+});
+
+// 보드 생성
+function createBoard() {
+  board.innerHTML = '';
+  boardState = Array(19).fill(null).map(() => Array(19).fill(null));
+  for (let r = 0; r < 19; r++) {
+    for (let c = 0; c < 19; c++) {
+      const cell = document.createElement('div');
+      cell.classList.add('cell');
+      cell.dataset.row = r;
+      cell.dataset.col = c;
+      cell.addEventListener('click', placeStone);
+      board.appendChild(cell);
+    }
+  }
+}
+
+// 돌 놓기
+function placeStone(e) {
+  const r = parseInt(e.target.dataset.row);
+  const c = parseInt(e.target.dataset.col);
+  if (boardState[r][c] || currentPlayer !== selectedColor) return;
+
+  addStone(r, c, currentPlayer);
+  if (checkWin(r, c, currentPlayer)) return endGame(currentPlayer);
+  currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+  setTimeout(botMove, 300);
+}
+
+// 돌 추가
+function addStone(r, c, color) {
+  const cell = board.querySelector(`.cell[data-row='${r}'][data-col='${c}']`);
+  const stone = document.createElement('div');
+  stone.classList.add('stone', color);
+  cell.appendChild(stone);
+  boardState[r][c] = color;
+}
+
+// 승리 체크 (5목)
+function checkWin(r, c, color) {
+  const directions = [[0,1],[1,0],[1,1],[1,-1]];
+  for (let [dr,dc] of directions) {
+    let count = 1;
+    for (let i=1;i<5;i++){
+      let nr=r+dr*i, nc=c+dc*i;
+      if(nr<0||nr>=19||nc<0||nc>=19) break;
+      if(boardState[nr][nc]===color) count++; else break;
+    }
+    for (let i=1;i<5;i++){
+      let nr=r-dr*i, nc=c-dc*i;
+      if(nr<0||nr>=19||nc<0||nc>=19) break;
+      if(boardState[nr][nc]===color) count++; else break;
+    }
+    if(count>=5) return true;
+  }
+  return false;
+}
+
+// 게임 종료
+function endGame(winner) {
+  if (winner === selectedColor) userWins++;
+  totalGames++;
+
+  // 승률 저장
+  localStorage.setItem('userWins', userWins);
+  localStorage.setItem('totalGames', totalGames);
+
+  updateWinRate();
+  alert(`${winner === selectedColor ? "당신이" : "봇이"} 승리했습니다!`);
+
+  board.querySelectorAll('.cell').forEach(cell=>cell.removeEventListener('click', placeStone));
+}
+
+// 승률 표시
+function updateWinRate() {
+  const percent = totalGames === 0 ? 0 : Math.round((userWins/totalGames)*100);
+  winRateDisplay.textContent = `승률: ${userWins}승 / ${totalGames}전 (${percent}%)`;
+}
+
+// 봇 이동
+function botMove() {
+  if (currentPlayer === selectedColor) return;
+
+  let move;
+  switch(selectedDifficulty) {
+    case 'easy': move = getRandomMove(); break;
+    case 'medium': move = getAdjacentMove(); break;
+    case 'hard': move = getAdjacentMove(); break;
+    case 'hardcore': move = getBestMove(); break;
+  }
+
+  if(move){
+    addStone(move.row, move.col, currentPlayer);
+    if (checkWin(move.row, move.col, currentPlayer)) return endGame(currentPlayer);
+    currentPlayer = currentPlayer === 'black' ? 'white' : 'black';
+  }
+}
+
+// AI 전략 함수
+function getRandomMove() {
+  let empty=[];
+  for(let r=0;r<19;r++) for(let c=0;c<19;c++) if(!boardState[r][c]) empty.push({row:r,col:c});
+  return empty.length===0?null:empty[Math.floor(Math.random()*empty.length)];
+}
+
+function getAdjacentMove() {
+  let candidates=[];
+  const opponent = selectedColor==='black'?'white':'black';
+  for(let r=0;r<19;r++) for(let c=0;c<19;c++){
+    if(boardState[r][c]) continue;
+    if([[-1,0],[1,0],[0,-1],[0,1]].some(([dr,dc])=>{
+      let nr=r+dr,nc=c+dc;
+      return nr>=0&&nr<19&&nc>=0&&nc<19&&boardState[nr][nc]===opponent;
+    })) candidates.push({row:r,col:c});
+  }
+  return candidates.length===0?getRandomMove():candidates[Math.floor(Math.random()*candidates.length)];
+}
+
+function getBestMove() {
+  let best=null, score=-1;
+  for(let r=0;r<19;r++) for(let c=0;c<19;c++){
+    if(boardState[r][c]) continue;
+    let s=19-(Math.abs(9-r)+Math.abs(9-c));
+    if(s>score){ score=s; best={row:r,col:c}; }
+  }
+  return best;
+}
+
+// 다시하기 버튼
+resetBtn.addEventListener('click', () => {
+  createBoard();
+  currentPlayer = selectedColor;
+});
+</script>
+
+</body>
+</html>
